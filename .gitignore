@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+venv/
+data/aiml/catalog.json
+data/aiml/faiss.index
+data/aiml/metadata.json
+data/dsa/catalog.json
+data/dsa/faiss.index
+data/dsa/metadata.json
+*.index
