@@ -50,13 +50,24 @@ def upsert_entries(competency: str, entries: list[dict]) -> int:
     if not entries:
         return 0
 
+    def _sanitize(obj):
+        """Recursively sanitize values for MongoDB compatibility."""
+        if isinstance(obj, dict):
+            return {k: _sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_sanitize(i) for i in obj]
+        if isinstance(obj, int):
+            # MongoDB max int is 8 bytes (int64 max = 9223372036854775807)
+            if obj > 9223372036854775807 or obj < -9223372036854775808:
+                return str(obj)
+        return obj
+
     col = _collection(competency)
     ops = []
     for entry in entries:
-        doc = dict(entry)
+        doc = _sanitize(dict(entry))
         doc["competency"] = competency
-        # Use id field as _id, fallback to title for DSA
-        doc_id = doc.pop("id", None) or doc.get("title", "").lower().replace(" ", "-")
+        doc_id = doc.pop("id", None) or str(doc.get("title", "")).lower().replace(" ", "-")
         ops.append(UpdateOne(
             {"_id": doc_id},
             {"$set": doc},
