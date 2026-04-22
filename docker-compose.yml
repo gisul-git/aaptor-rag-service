@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: rag-mongo
+    restart: always
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: rag_db
+
+  rag-service:
+    build: .
+    container_name: rag-service
+    restart: always
+    ports:
+      - "7003:7003"
+    volumes:
+      - ./data:/app/data        # FAISS indexes + catalog JSON files
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: rag_db
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      DATA_DIR: /app/data
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:
