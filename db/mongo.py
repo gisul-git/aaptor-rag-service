@@ -56,10 +56,14 @@ def upsert_entries(competency: str, entries: list[dict]) -> int:
             return {k: _sanitize(v) for k, v in obj.items()}
         if isinstance(obj, list):
             return [_sanitize(i) for i in obj]
-        if isinstance(obj, int):
+        if isinstance(obj, int) and not isinstance(obj, bool):
             # MongoDB max int is 8 bytes (int64 max = 9223372036854775807)
-            if obj > 9223372036854775807 or obj < -9223372036854775808:
+            if obj > 2147483647 or obj < -2147483648:
                 return str(obj)
+        if isinstance(obj, float):
+            import math
+            if math.isnan(obj) or math.isinf(obj):
+                return None
         return obj
 
     col = _collection(competency)
