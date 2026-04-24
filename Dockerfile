@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Data directory is mounted as volume — create empty dirs as placeholders
-RUN mkdir -p data/aiml data/dsa data/devops data/data_engineering data/design data/prompt_engineering
+RUN mkdir -p data/aiml data/dsa data/devops data/data_engineering data/design data/prompt_engineering data/cloud data/fullstack
 
 EXPOSE 7003
 
