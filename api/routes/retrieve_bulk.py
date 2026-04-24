@@ -35,7 +35,7 @@ async def retrieve_bulk(req: BulkRetrieveRequest):
     if not results:
         raise HTTPException(
             status_code=404,
-            detail=f"No matches found for competency='{req.competency}' topic='{req.topic}'"
+            detail=f"No matches found for competency='{req.competency}' topic='{req.topic}' difficulty='{req.difficulty}'"
         )
 
     return {
@@ -112,7 +112,7 @@ def _bulk_search(
                             "method": "faiss",
                         })
         except Exception as e:
-            pass  # fall through to random sampling
+            logger.error("FAISS bulk search error: %s", e)  # fall through to random sampling
 
     # If not enough from FAISS, fill with random samples from catalog
     if len(results) < count:
@@ -123,6 +123,7 @@ def _bulk_search(
             and i not in seen_indexes
             and e.get("public_testcases")  # only problems with test cases
         ]
+        logger.info("Random fallback: %d candidates for difficulty='%s' in %d catalog entries", len(diff_candidates), difficulty_lower, len(catalog))
         random.shuffle(diff_candidates)
         for i, entry in diff_candidates:
             if len(results) >= count:
