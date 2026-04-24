@@ -89,7 +89,11 @@ def upsert_entries(competency: str, entries: list[dict]) -> int:
 def load_all(competency: str) -> list[dict]:
     """Load all catalog entries for a competency from MongoDB."""
     col = _collection(competency)
-    docs = list(col.find({}, {"_id": 0}))
+    # Include _id so sort order at runtime matches sort order at index-build time
+    docs = []
+    for doc in col.find({}):
+        doc["_id"] = str(doc["_id"])  # stringify ObjectId for JSON compatibility
+        docs.append(doc)
     logger.info("Loaded %d entries from MongoDB '%s_catalog'", len(docs), competency)
     return docs
 

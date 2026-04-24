@@ -60,6 +60,7 @@ def _bulk_search(
     difficulty_lower = difficulty.lower()
     results = []
     seen_titles = set()
+    seen_indexes = set()
 
     # Try FAISS first
     if competency in state.indexes:
@@ -69,8 +70,8 @@ def _bulk_search(
                 [query], convert_to_numpy=True, normalize_embeddings=True
             ).astype(np.float32)
 
-            # Search large pool
-            search_k = min(count * 20, state.indexes[competency].ntotal)
+            # Search large pool — use count*30 to have plenty of candidates after dedup
+            search_k = min(count * 30, state.indexes[competency].ntotal)
             scores, indices = state.indexes[competency].search(vec, search_k)
             meta = state.metadata[competency]
 
@@ -101,8 +102,10 @@ def _bulk_search(
 
                 if full_entry:
                     title = full_entry.get("title", full_entry.get("name", ""))
-                    if title not in seen_titles:
+                    # Deduplicate by both title AND catalog position to handle index mismatches
+                    if title not in seen_titles and stored_index not in seen_indexes:
                         seen_titles.add(title)
+                        seen_indexes.add(stored_index)
                         results.append({
                             "matched": full_entry,
                             "score": round(float(score), 4),
@@ -114,18 +117,20 @@ def _bulk_search(
     # If not enough from FAISS, fill with random samples from catalog
     if len(results) < count:
         diff_candidates = [
-            e for e in catalog
+            (i, e) for i, e in enumerate(catalog)
             if str(e.get("difficulty", "")).lower() == difficulty_lower
             and e.get("title", e.get("name", "")) not in seen_titles
+            and i not in seen_indexes
             and e.get("public_testcases")  # only problems with test cases
         ]
         random.shuffle(diff_candidates)
-        for entry in diff_candidates:
+        for i, entry in diff_candidates:
             if len(results) >= count:
                 break
             title = entry.get("title", entry.get("name", ""))
-            if title not in seen_titles:
+            if title not in seen_titles and i not in seen_indexes:
                 seen_titles.add(title)
+                seen_indexes.add(i)
                 results.append({
                     "matched": entry,
                     "score": 0.0,
