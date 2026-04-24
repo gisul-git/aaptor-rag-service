@@ -54,7 +54,7 @@ def search(
             if full_entry:
                 logger.info(
                     "FAISS match: '%s' score=%.3f competency='%s'",
-                    full_entry.get("name") or full_entry.get("title", ""), float(score), competency
+                    full_entry.get("name") or full_entry.get("title") or full_entry.get("concept", ""), float(score), competency
                 )
                 return {
                     "matched": full_entry,
