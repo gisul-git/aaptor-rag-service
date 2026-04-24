@@ -93,6 +93,10 @@ def _keyword_fallback(
             entry.get("title", ""),
             entry.get("description", ""),
             entry.get("problem_description", ""),
+            entry.get("context", ""),          # DevOps
+            entry.get("concept", ""),          # Cloud
+            entry.get("core_idea", ""),        # Cloud
+            entry.get("service", ""),          # Cloud
             " ".join(entry.get("tags", [])),
             " ".join(entry.get("topics", [])),
         ]).lower()

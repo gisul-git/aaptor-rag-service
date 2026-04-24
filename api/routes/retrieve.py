@@ -18,7 +18,7 @@ class RetrieveRequest(BaseModel):
 
 @router.post("/api/v1/retrieve")
 async def retrieve(req: RetrieveRequest):
-    if req.competency not in ["aiml", "dsa", "devops", "data_engineering", "design", "prompt_engineering"]:
+    if req.competency not in ["aiml", "dsa", "devops", "data_engineering", "design", "prompt_engineering", "cloud", "fullstack"]:
         raise HTTPException(status_code=400, detail=f"Unknown competency: {req.competency}")
 
     result = search(

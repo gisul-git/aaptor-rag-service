@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import mongo
 from core.settings import get_settings
 
-COMPETENCIES = ["aiml", "dsa"]
+COMPETENCIES = ["aiml", "dsa", "devops", "cloud"]
 
 
 def main():
