@@ -8,6 +8,9 @@ from core import state
 
 logger = logging.getLogger(__name__)
 
+# Minimum cosine similarity score to accept a FAISS match
+_MIN_SCORE = 0.3
+
 
 def search(
     competency: str,
@@ -29,32 +32,47 @@ def search(
             [query], convert_to_numpy=True, normalize_embeddings=True
         ).astype(np.float32)
 
-        scores, indices = state.indexes[competency].search(vec, top_k * 3)
+        # Search larger pool to increase chance of finding difficulty match
+        search_k = min(top_k * 10, state.indexes[competency].ntotal)
+        scores, indices = state.indexes[competency].search(vec, search_k)
         meta = state.metadata[competency]
         catalog = state.catalogs[competency]
 
         for idx, score in zip(indices[0], scores[0]):
             if idx < 0 or idx >= len(meta):
                 continue
+
+            # Skip low-confidence matches
+            if float(score) < _MIN_SCORE:
+                continue
+
             entry_meta = meta[idx]
-            # Handle difficulty as list or string — skip filter if no difficulty in metadata
+
+            # Difficulty filter — skip if no difficulty in metadata (e.g. cloud)
             meta_diff = entry_meta.get("difficulty", "")
             if meta_diff:
                 if isinstance(meta_diff, list):
                     meta_diff = meta_diff[0] if meta_diff else ""
                 if meta_diff.lower() != difficulty.lower():
                     continue
-            # Find full catalog entry by id or by index
+
+            # Find full catalog entry
+            # Use stored index position for stable lookup (DSA has no id field)
+            stored_index = entry_meta.get("index", idx)
             entry_id = entry_meta.get("id", "")
+
+            full_entry = None
             if entry_id:
                 full_entry = next((e for e in catalog if e.get("id") == entry_id), None)
-            else:
-                # DSA catalog has no id — match by index directly
-                full_entry = catalog[idx] if idx < len(catalog) else None
+            if full_entry is None and stored_index < len(catalog):
+                full_entry = catalog[stored_index]
+
             if full_entry:
                 logger.info(
                     "FAISS match: '%s' score=%.3f competency='%s'",
-                    full_entry.get("name") or full_entry.get("title") or full_entry.get("concept", ""), float(score), competency
+                    full_entry.get("name") or full_entry.get("title") or full_entry.get("concept", ""),
+                    float(score),
+                    competency,
                 )
                 return {
                     "matched": full_entry,
@@ -62,6 +80,9 @@ def search(
                     "method": "faiss",
                     "competency": competency,
                 }
+
+        logger.info("No FAISS match above threshold for '%s' difficulty='%s' — trying keyword", competency, difficulty)
+
     except Exception as e:
         logger.error("FAISS search failed for '%s': %s", competency, e)
 
@@ -95,10 +116,10 @@ def _keyword_fallback(
             entry.get("title", ""),
             entry.get("description", ""),
             entry.get("problem_description", ""),
-            entry.get("context", ""),          # DevOps
-            entry.get("concept", ""),          # Cloud
-            entry.get("core_idea", ""),        # Cloud
-            entry.get("service", ""),          # Cloud
+            entry.get("context", ""),
+            entry.get("concept", ""),
+            entry.get("core_idea", ""),
+            entry.get("service", ""),
             " ".join(entry.get("tags", [])),
             " ".join(entry.get("topics", [])),
         ]).lower()

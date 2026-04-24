@@ -45,8 +45,9 @@ def load_all_indexes() -> None:
             else:
                 metadata[competency] = []
             
-            # Load catalog from MongoDB (source of truth)
-            catalogs[competency] = mongo.load_all(competency)
+            # Load catalog from MongoDB (source of truth) — sort for stable ordering
+            raw_catalog = mongo.load_all(competency)
+            catalogs[competency] = sorted(raw_catalog, key=lambda e: str(e.get("_id", e.get("id", e.get("title", "")))))
             
             # Ensure indexes exist
             mongo.ensure_indexes(competency)
@@ -72,8 +73,9 @@ def reload_index(competency: str) -> None:
         indexes[competency] = faiss.read_index(str(s.faiss_path(competency)))
         with open(s.metadata_path(competency), encoding="utf-8") as f:
             metadata[competency] = json.load(f)
-        # Always reload catalog from MongoDB
-        catalogs[competency] = mongo.load_all(competency)
+        # Always reload catalog from MongoDB — sort for stable ordering
+        raw_catalog = mongo.load_all(competency)
+        catalogs[competency] = sorted(raw_catalog, key=lambda e: str(e.get("_id", e.get("id", e.get("title", "")))))
         logger.info("Reloaded '%s' index: %d vectors, %d catalog entries", competency, indexes[competency].ntotal, len(catalogs[competency]))
     except Exception as e:
         logger.error("Failed to reload '%s' index: %s", competency, e)

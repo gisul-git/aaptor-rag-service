@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from core.state import COMPETENCIES
 from services.retrieval import search
 
 router = APIRouter(tags=["retrieve"])
@@ -18,7 +19,7 @@ class RetrieveRequest(BaseModel):
 
 @router.post("/api/v1/retrieve")
 async def retrieve(req: RetrieveRequest):
-    if req.competency not in ["aiml", "dsa", "devops", "data_engineering", "design", "prompt_engineering", "cloud", "fullstack"]:
+    if req.competency not in COMPETENCIES:
         raise HTTPException(status_code=400, detail=f"Unknown competency: {req.competency}")
 
     result = search(

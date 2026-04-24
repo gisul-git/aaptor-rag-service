@@ -41,6 +41,9 @@ async def rebuild_index(
 
     logger.info("Rebuilding '%s' index from %d entries...", competency, len(catalog))
 
+    # Sort catalog for stable ordering — ensures FAISS index positions are deterministic
+    catalog = sorted(catalog, key=lambda e: str(e.get("_id", e.get("id", e.get("title", "")))))
+
     # Build text for each entry
     texts = []
     meta_entries = []
