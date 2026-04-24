@@ -37,12 +37,13 @@ def search(
             if idx < 0 or idx >= len(meta):
                 continue
             entry_meta = meta[idx]
-            # Handle difficulty as list or string
+            # Handle difficulty as list or string — skip filter if no difficulty in metadata
             meta_diff = entry_meta.get("difficulty", "")
-            if isinstance(meta_diff, list):
-                meta_diff = meta_diff[0] if meta_diff else ""
-            if meta_diff.lower() != difficulty.lower():
-                continue
+            if meta_diff:
+                if isinstance(meta_diff, list):
+                    meta_diff = meta_diff[0] if meta_diff else ""
+                if meta_diff.lower() != difficulty.lower():
+                    continue
             # Find full catalog entry by id or by index
             entry_id = entry_meta.get("id", "")
             if entry_id:
@@ -82,12 +83,13 @@ def _keyword_fallback(
     difficulty_lower = difficulty.lower()
 
     for entry in catalog:
-        # Handle difficulty as list or string
+        # Handle difficulty as list or string — skip filter if entry has no difficulty
         entry_diff = entry.get("difficulty", "")
-        if isinstance(entry_diff, list):
-            entry_diff = entry_diff[0] if entry_diff else ""
-        if str(entry_diff).lower() != difficulty_lower:
-            continue
+        if entry_diff:
+            if isinstance(entry_diff, list):
+                entry_diff = entry_diff[0] if entry_diff else ""
+            if str(entry_diff).lower() != difficulty_lower:
+                continue
         searchable = " ".join([
             entry.get("name", ""),
             entry.get("title", ""),
