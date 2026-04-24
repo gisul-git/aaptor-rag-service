@@ -9,3 +9,4 @@ data/dsa/catalog.json
 data/dsa/faiss.index
 data/dsa/metadata.json
 *.index
+*.Zone.Identifier
