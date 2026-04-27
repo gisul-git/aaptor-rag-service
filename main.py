@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    s = get_settings()
+    if not s.admin_api_key:
+        logger.warning(
+            "SECURITY WARNING: ADMIN_API_KEY is not set. "
+            "Rebuild, ingest, and delete endpoints are UNPROTECTED."
+        )
     logger.info("Loading RAG indexes...")
     state.load_all_indexes()
     logger.info("RAG service ready.")

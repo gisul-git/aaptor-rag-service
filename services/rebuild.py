@@ -59,6 +59,8 @@ async def rebuild_index(
             entry.get("core_idea", ""),        # Cloud
             entry.get("service", ""),          # Cloud
             entry.get("action", ""),           # Cloud
+            entry.get("sql_category", ""),     # SQL
+            entry.get("source_complexity", ""), # SQL
             " ".join(entry.get("tags", [])),
             " ".join(entry.get("topics", [])),
             entry.get("domain", ""),
