@@ -56,8 +56,7 @@ def search(
                 if meta_diff.lower() != difficulty.lower():
                     continue
 
-            # Find full catalog entry
-            # Use stored index position for stable lookup (DSA has no id field)
+            # Find full catalog entry (need it for concept filtering)
             stored_index = entry_meta.get("index", idx)
             entry_id = entry_meta.get("id", "")
 
@@ -67,6 +66,24 @@ def search(
             if full_entry is None and stored_index < len(catalog):
                 full_entry = catalog[stored_index]
 
+            if not full_entry:
+                continue
+
+            # Concept filter (e.g. sql_category) — if concepts provided, at least one must match
+            if concepts:
+                entry_category = full_entry.get("sql_category", "").lower()
+                entry_tags = [t.lower() for t in full_entry.get("tags", [])]
+                entry_topics = [t.lower() for t in full_entry.get("topics", [])]
+                concepts_lower = [c.lower() for c in concepts]
+                
+                # Check if any concept matches sql_category, tags, or topics
+                if not any(
+                    c == entry_category or c in entry_tags or c in entry_topics
+                    for c in concepts_lower
+                ):
+                    continue
+
+            # Return matched entry
             if full_entry:
                 logger.info(
                     "FAISS match: '%s' score=%.3f competency='%s'",
@@ -120,9 +137,20 @@ def _keyword_fallback(
             entry.get("concept", ""),
             entry.get("core_idea", ""),
             entry.get("service", ""),
+            entry.get("sql_category", ""),
             " ".join(entry.get("tags", [])),
             " ".join(entry.get("topics", [])),
         ]).lower()
+
+        # If concepts provided, also require at least one concept match on sql_category/tags/topics
+        if concepts:
+            concepts_lower = [c.lower() for c in concepts]
+            entry_category = entry.get("sql_category", "").lower()
+            entry_tags = [t.lower() for t in entry.get("tags", [])]
+            entry_topics = [t.lower() for t in entry.get("topics", [])]
+            if not any(c == entry_category or c in entry_tags or c in entry_topics for c in concepts_lower):
+                continue
+
         if any(kw in searchable for kw in keywords):
             logger.info("Keyword match: '%s' competency='%s'", entry.get("name") or entry.get("title"), competency)
             return {
