@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -7,6 +8,8 @@ from pydantic import BaseModel
 
 from core import state
 from core.state import COMPETENCIES
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["retrieve-bulk"])
 
@@ -70,8 +73,8 @@ def _bulk_search(
                 [query], convert_to_numpy=True, normalize_embeddings=True
             ).astype(np.float32)
 
-            # Search large pool — use count*30 to have plenty of candidates after dedup
-            search_k = min(count * 30, state.indexes[competency].ntotal)
+            # Search large pool — use count*50 to have plenty after difficulty + concept filtering
+            search_k = min(count * 50, state.indexes[competency].ntotal)
             scores, indices = state.indexes[competency].search(vec, search_k)
             meta = state.metadata[competency]
 
@@ -102,6 +105,16 @@ def _bulk_search(
 
                 if full_entry:
                     title = full_entry.get("title", full_entry.get("name", ""))
+
+                    # Concept filter — if concepts provided, at least one must match sql_category/tags/topics
+                    if concepts:
+                        concepts_lower = [c.lower() for c in concepts]
+                        entry_category = full_entry.get("sql_category", "").lower()
+                        entry_tags = [t.lower() for t in full_entry.get("tags", [])]
+                        entry_topics = [t.lower() for t in full_entry.get("topics", [])]
+                        if not any(c == entry_category or c in entry_tags or c in entry_topics for c in concepts_lower):
+                            continue
+
                     # Deduplicate by both title AND catalog position to handle index mismatches
                     if title not in seen_titles and stored_index not in seen_indexes:
                         seen_titles.add(title)
@@ -116,13 +129,21 @@ def _bulk_search(
 
     # If not enough from FAISS, fill with random samples from catalog
     if len(results) < count:
-        diff_candidates = [
-            (i, e) for i, e in enumerate(catalog)
-            if str(e.get("difficulty", "")).lower() == difficulty_lower
-            and e.get("title", e.get("name", "")) not in seen_titles
-            and i not in seen_indexes
-            and e.get("public_testcases")  # only problems with test cases
-        ]
+        concepts_lower = [c.lower() for c in concepts]
+        diff_candidates = []
+        for i, e in enumerate(catalog):
+            if str(e.get("difficulty", "")).lower() != difficulty_lower:
+                continue
+            if e.get("title", e.get("name", "")) in seen_titles or i in seen_indexes:
+                continue
+            # Concept filter
+            if concepts_lower:
+                entry_category = e.get("sql_category", "").lower()
+                entry_tags = [t.lower() for t in e.get("tags", [])]
+                entry_topics = [t.lower() for t in e.get("topics", [])]
+                if not any(c == entry_category or c in entry_tags or c in entry_topics for c in concepts_lower):
+                    continue
+            diff_candidates.append((i, e))
         logger.info("Random fallback: %d candidates for difficulty='%s' in %d catalog entries", len(diff_candidates), difficulty_lower, len(catalog))
         random.shuffle(diff_candidates)
         for i, entry in diff_candidates:

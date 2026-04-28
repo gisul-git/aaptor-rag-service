@@ -32,8 +32,8 @@ def search(
             [query], convert_to_numpy=True, normalize_embeddings=True
         ).astype(np.float32)
 
-        # Search larger pool to increase chance of finding difficulty match
-        search_k = min(top_k * 10, state.indexes[competency].ntotal)
+        # Search larger pool to increase chance of finding difficulty + concept match
+        search_k = min(top_k * 20, state.indexes[competency].ntotal)
         scores, indices = state.indexes[competency].search(vec, search_k)
         meta = state.metadata[competency]
         catalog = state.catalogs[competency]
