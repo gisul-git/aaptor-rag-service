@@ -315,13 +315,22 @@ def _keyword_fallback(
             " ".join(entry.get("topics", [])),
         ]).lower()
 
-        # If concepts provided, also require at least one concept match on sql_category/tags/topics
+        # Concept filter: for SQL, concepts map directly to sql_category
+        # Use it as a PREFERENCE not a hard filter — first pass with concept match,
+        # second pass without if nothing found
         if concepts:
             concepts_lower = [c.lower() for c in concepts]
             entry_category = entry.get("sql_category", "").lower()
             entry_tags = [t.lower() for t in entry.get("tags", [])]
             entry_topics = [t.lower() for t in entry.get("topics", [])]
-            if not any(c == entry_category or c in entry_tags or c in entry_topics for c in concepts_lower):
+            concept_matched = any(
+                c == entry_category or c in entry_tags or c in entry_topics
+                for c in concepts_lower
+            )
+            # Also check if any topic word matches sql_category
+            topic_words = [w for w in topic.lower().split() if len(w) > 3]
+            topic_category_match = any(w == entry_category or w in entry_category for w in topic_words)
+            if not concept_matched and not topic_category_match:
                 continue
 
         if any(kw in searchable for kw in keywords):
@@ -343,5 +352,24 @@ def _keyword_fallback(
                 "method": "keyword",
                 "competency": competency,
             }
+
+    # Second pass — relax concept filter, just match on topic/category
+    topic_words_all = [w for w in topic.lower().split() if len(w) > 3]
+    for entry in catalog:
+        entry_diff = entry.get("difficulty", "")
+        if entry_diff:
+            if isinstance(entry_diff, list):
+                entry_diff = entry_diff[0] if entry_diff else ""
+            if str(entry_diff).lower() != difficulty_lower:
+                continue
+        entry_category = entry.get("sql_category", "").lower()
+        if concepts:
+            concepts_lower = [c.lower() for c in concepts]
+            if any(c == entry_category for c in concepts_lower):
+                logger.info("Keyword category-match (pass2): '%s'", entry.get("title", ""))
+                return {"matched": entry, "score": 0.0, "method": "keyword", "competency": competency}
+        if topic_words_all and any(w == entry_category for w in topic_words_all):
+            logger.info("Keyword topic-category-match (pass2): '%s'", entry.get("title", ""))
+            return {"matched": entry, "score": 0.0, "method": "keyword", "competency": competency}
 
     return None
