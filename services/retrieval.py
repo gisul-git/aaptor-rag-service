@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 # Minimum cosine similarity score to accept a FAISS match
 _MIN_SCORE = 0.3
+# Lower threshold for competencies with short text entries (SQL, DSA)
+_MIN_SCORE_SQL = 0.15
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AIML Dataset Registry
@@ -213,7 +215,8 @@ def search(
                 continue
 
             # Skip low-confidence matches
-            if float(score) < _MIN_SCORE:
+            min_score = _MIN_SCORE_SQL if competency == "sql" else _MIN_SCORE
+            if float(score) < min_score:
                 continue
 
             entry_meta = meta[idx]
@@ -323,6 +326,17 @@ def _keyword_fallback(
 
         if any(kw in searchable for kw in keywords):
             logger.info("Keyword match: '%s' competency='%s'", entry.get("name") or entry.get("title"), competency)
+            return {
+                "matched": entry,
+                "score": 0.0,
+                "method": "keyword",
+                "competency": competency,
+            }
+
+        # Also match on individual words from the topic (e.g. "window functions" → "window")
+        topic_words = [w for w in topic.lower().split() if len(w) > 3]
+        if topic_words and any(w in searchable for w in topic_words):
+            logger.info("Keyword word-match: '%s' competency='%s'", entry.get("name") or entry.get("title"), competency)
             return {
                 "matched": entry,
                 "score": 0.0,
