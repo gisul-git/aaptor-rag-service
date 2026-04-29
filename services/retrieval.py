@@ -86,10 +86,10 @@ _AIML_REGISTRY: list[dict] = [
         "forbidden_ids": [],
     },
     {
-        "topic_signals": ["breast cancer", "cancer detection", "tumor classification"],
+        "topic_signals": ["breast cancer", "cancer detection", "tumor classification", "malignant benign", "cancer prediction"],
         "preferred_ids": ["sklearn-breast-cancer"],
-        "required_tags": ["cancer"],
-        "forbidden_ids": [],
+        "required_tags": ["breast-cancer"],
+        "forbidden_ids": ["openml-lung-cancer", "openml-covid-symptoms"],
     },
     {
         "topic_signals": ["house price", "housing price", "real estate prediction", "home price"],
