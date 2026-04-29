@@ -11,6 +11,159 @@ logger = logging.getLogger(__name__)
 # Minimum cosine similarity score to accept a FAISS match
 _MIN_SCORE = 0.3
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AIML Dataset Registry
+# Maps topic signals → preferred catalog IDs + required tags.
+# Registry lookup runs BEFORE FAISS and ignores difficulty filtering so that
+# well-known named datasets (iris, titanic, mnist …) are always returned
+# correctly regardless of the requested difficulty level.
+# ─────────────────────────────────────────────────────────────────────────────
+_AIML_REGISTRY: list[dict] = [
+    {
+        "topic_signals": ["iris", "iris flower", "iris classification", "iris dataset"],
+        "preferred_ids": ["sklearn-iris"],
+        "required_tags": ["flowers"],
+        "forbidden_ids": ["seaborn-penguins", "hf-beans"],
+    },
+    {
+        "topic_signals": ["penguin", "palmer penguin"],
+        "preferred_ids": ["seaborn-penguins"],
+        "required_tags": ["biology"],
+        "forbidden_ids": ["sklearn-iris"],
+    },
+    {
+        "topic_signals": ["titanic", "titanic survival", "passenger survival"],
+        "preferred_ids": ["seaborn-titanic", "openml-titanic", "openml-titanic-survival"],
+        "required_tags": ["titanic"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["mnist", "handwritten digit", "digit recognition"],
+        "preferred_ids": ["keras-mnist", "openml-mnist-784", "sklearn-digits"],
+        "required_tags": ["digits"],
+        "forbidden_ids": ["keras-fashion-mnist"],
+    },
+    {
+        "topic_signals": ["fashion mnist", "clothing classification", "apparel classification"],
+        "preferred_ids": ["keras-fashion-mnist"],
+        "required_tags": ["fashion"],
+        "forbidden_ids": ["keras-mnist"],
+    },
+    {
+        "topic_signals": ["cifar", "cifar-10", "cifar10", "object recognition"],
+        "preferred_ids": ["keras-cifar10"],
+        "required_tags": ["object-recognition"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["customer churn", "churn prediction", "churn analysis", "churn detection"],
+        "preferred_ids": ["openml-telco-churn", "openml-bank-churn"],
+        "required_tags": ["churn"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["employee attrition", "hr attrition", "staff turnover", "workforce attrition"],
+        "preferred_ids": ["openml-hr-attrition"],
+        "required_tags": ["attrition"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["fraud detection", "credit card fraud", "transaction fraud"],
+        "preferred_ids": ["openml-fraud-detection"],
+        "required_tags": ["fraud"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["diabetes prediction", "diabetes detection", "diabetes classification"],
+        "preferred_ids": ["openml-pima-diabetes", "sklearn-diabetes"],
+        "required_tags": ["diabetes"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["heart disease", "cardiac prediction", "heart attack", "cardiovascular"],
+        "preferred_ids": ["openml-heart-disease"],
+        "required_tags": ["heart-disease"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["breast cancer", "cancer detection", "tumor classification"],
+        "preferred_ids": ["sklearn-breast-cancer"],
+        "required_tags": ["cancer"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["house price", "housing price", "real estate prediction", "home price"],
+        "preferred_ids": ["sklearn-california-housing"],
+        "required_tags": ["real-estate"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["sentiment analysis", "review sentiment", "opinion mining"],
+        "preferred_ids": ["hf-imdb", "hf-sst2", "keras-imdb"],
+        "required_tags": ["sentiment"],
+        "forbidden_ids": [],
+    },
+    {
+        "topic_signals": ["spam detection", "email spam", "sms spam"],
+        "preferred_ids": ["hf-spam-detection"],
+        "required_tags": ["spam"],
+        "forbidden_ids": [],
+    },
+]
+
+
+def _registry_lookup_aiml(topic: str, concepts: list[str], catalog: list[dict]) -> dict | None:
+    """
+    Check the AIML registry for a known topic signal match.
+    Returns the best matching catalog entry, or None if no registry entry matches.
+    Deliberately ignores difficulty — named datasets should always be returned
+    regardless of the requested difficulty level.
+    """
+    topic_lower = topic.lower().strip()
+    all_text = topic_lower + " " + " ".join(c.lower() for c in concepts)
+
+    for entry in _AIML_REGISTRY:
+        if not any(sig in all_text for sig in entry["topic_signals"]):
+            continue
+
+        required_tags = set(entry.get("required_tags", []))
+        forbidden_ids = set(entry.get("forbidden_ids", []))
+        preferred_ids = entry.get("preferred_ids", [])
+
+        # Try preferred IDs first — exact match
+        for pid in preferred_ids:
+            for ds in catalog:
+                ds_id = ds.get("id", "")
+                if ds_id == pid and ds_id not in forbidden_ids:
+                    logger.info(
+                        "Registry exact match: '%s' (id=%s) for topic='%s'",
+                        ds.get("name", ""), ds_id, topic,
+                    )
+                    return ds
+
+        # Fall back to required_tags scan
+        for ds in catalog:
+            if ds.get("id", "") in forbidden_ids:
+                continue
+            ds_tags = {t.lower() for t in ds.get("tags", [])}
+            if required_tags and required_tags.issubset(ds_tags):
+                logger.info(
+                    "Registry tag match: '%s' (required_tags=%s) for topic='%s'",
+                    ds.get("name", ""), required_tags, topic,
+                )
+                return ds
+
+        # Signal matched but no valid catalog entry — return None so caller
+        # does NOT fall through to FAISS (which would return the wrong dataset)
+        logger.warning(
+            "Registry signal matched '%s' but no catalog entry satisfies "
+            "required_tags=%s — will use synthetic",
+            topic, required_tags,
+        )
+        return None  # explicit: synthetic > wrong dataset
+
+    return None  # no registry entry matched — proceed to FAISS
+
 
 def search(
     competency: str,
@@ -20,6 +173,23 @@ def search(
     top_k: int = 5,
 ) -> dict | None:
     """Search FAISS index for best matching entry."""
+
+    # ── Step 0: Registry lookup (AIML only) ──────────────────────────────────
+    if competency == "aiml":
+        catalog = state.catalogs.get(competency, [])
+        registry_match = _registry_lookup_aiml(topic, concepts, catalog)
+        if registry_match is not None:
+            return {
+                "matched": registry_match,
+                "score": 1.0,
+                "method": "registry",
+                "competency": competency,
+            }
+        # registry_match == None means either:
+        #   a) no registry entry matched → fall through to FAISS (safe)
+        #   b) registry entry matched but no valid catalog entry → _registry_lookup_aiml
+        #      already logged a warning; we still fall through to FAISS here because
+        #      the caller (generate_aiml_library) will use synthetic if FAISS also fails.
 
     if competency not in state.indexes:
         logger.warning("No index loaded for competency='%s'", competency)
